@@ -1,0 +1,5 @@
+{
+  "name": "AI Course Creator",
+  "description": "Transform your PDFs into personalized, multi-level learning courses. This AI-powered tool automatically generates a course structure with summaries, quizzes, and study materials based on your document.",
+  "requestFramePermissions": []
+}
