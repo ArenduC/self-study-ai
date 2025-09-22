@@ -1,4 +1,5 @@
 import { GoogleGenAI, Type, Part } from "@google/genai";
+import { API_KEY } from './config';
 
 // --- RE-USED INTERFACES (now part of the Course structure) ---
 export interface QuizQuestion {
@@ -74,7 +75,7 @@ export interface Course {
   };
 }
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+const ai = new GoogleGenAI({ apiKey: API_KEY });
 
 // Helper to convert base64 data URLs to Gemini Parts
 const fileToGenerativePart = (dataUrl: string): Part => {
