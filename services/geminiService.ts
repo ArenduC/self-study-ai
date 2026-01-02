@@ -1,5 +1,5 @@
+
 import { GoogleGenAI, Type, Part } from "@google/genai";
-import { API_KEY } from './config';
 
 // --- RE-USED INTERFACES (now part of the Course structure) ---
 export interface QuizQuestion {
@@ -75,7 +75,8 @@ export interface Course {
   };
 }
 
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+// Fixed: Using process.env.API_KEY directly as per guidelines.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // Helper to convert base64 data URLs to Gemini Parts
 const fileToGenerativePart = (dataUrl: string): Part => {
@@ -183,11 +184,13 @@ export async function generateCourse(text: string, images: string[], difficulty:
       images.forEach(img => contents.push(fileToGenerativePart(img)));
     }
 
+    // Fixed: Using gemini-3-pro-preview for complex course generation tasks.
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3-pro-preview",
       contents: { parts: contents },
       config: { responseMimeType: "application/json", responseSchema: responseSchema },
     });
+    // Fixed: response.text is a property, not a method.
     const jsonString = response.text.trim();
     const parsedResponse = JSON.parse(jsonString);
 
@@ -261,8 +264,9 @@ export async function generateNewQuiz(levelSummary: string, levelTitle: string):
   };
 
   try {
+    // Fixed: Using gemini-3-flash-preview for basic quiz generation tasks.
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: { responseMimeType: "application/json", responseSchema: quizSchema },
     });
@@ -299,8 +303,9 @@ export async function generateWorldQuiz(country: string, category: string): Prom
   };
 
   try {
+    // Fixed: Using gemini-3-flash-preview for world trivia quizzes.
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: { responseMimeType: "application/json", responseSchema: quizSchema },
     });
@@ -375,8 +380,9 @@ async function generateLevelContent(fullText: string, allImages: string[], cours
     allImages.forEach(img => contents.push(fileToGenerativePart(img)));
   }
 
+  // Fixed: Using gemini-3-pro-preview for complex level content generation.
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: "gemini-3-pro-preview",
     contents: { parts: contents },
     config: { responseMimeType: "application/json", responseSchema: responseSchema },
   });
@@ -416,8 +422,9 @@ async function generateNextSteps(courseTopic: string): Promise<Course['nextSteps
     },
     required: ["relatedTopics", "advancedMaterial"]
   };
+  // Fixed: Using gemini-3-flash-preview for simple next step suggestions.
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: "gemini-3-flash-preview",
     contents: prompt,
     config: { responseMimeType: "application/json", responseSchema: responseSchema },
   });
@@ -564,8 +571,9 @@ export async function generateAdditionalLevels(
       newImages.forEach(img => contents.push(fileToGenerativePart(img)));
     }
 
+    // Fixed: Using gemini-3-pro-preview for complex level expansion.
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3-pro-preview",
       contents: { parts: contents },
       config: { responseMimeType: "application/json", responseSchema: responseSchema },
     });
