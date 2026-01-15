@@ -75,8 +75,35 @@ export interface Course {
   };
 }
 
-// Fixed: Using process.env.API_KEY directly as per guidelines.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+/**
+ * Interface for internal level generation logic
+ */
+interface LevelContent {
+  summary: string;
+  imageUrl?: string;
+  quiz: QuizQuestion[];
+  references: StudySuggestions;
+}
+
+/**
+ * Interface for manual level input structure
+ */
+export interface ManualLevel {
+  id: string;
+  title: string;
+}
+
+/**
+ * Helper to get a fresh instance of the AI client.
+ * This ensures process.env.API_KEY is accessed at call-time.
+ */
+const getAiClient = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("API Key is missing. Please ensure process.env.API_KEY is set in your environment.");
+  }
+  return new GoogleGenAI({ apiKey });
+};
 
 // Helper to convert base64 data URLs to Gemini Parts
 const fileToGenerativePart = (dataUrl: string): Part => {
@@ -100,6 +127,7 @@ const fileToGenerativePart = (dataUrl: string): Part => {
  * @returns A promise that resolves with the structured Course object.
  */
 export async function generateCourse(text: string, images: string[], difficulty: 'Beginner' | 'Advanced'): Promise<Course> {
+  const ai = getAiClient();
   const prompt = `
       You are an AI education assistant. Based on the provided academic text and accompanying images (graphs, diagrams, etc.), create a comprehensive learning course.
       The target audience is at a ${difficulty} level.
@@ -184,13 +212,11 @@ export async function generateCourse(text: string, images: string[], difficulty:
       images.forEach(img => contents.push(fileToGenerativePart(img)));
     }
 
-    // Fixed: Using gemini-3-pro-preview for complex course generation tasks.
     const response = await ai.models.generateContent({
       model: "gemini-3-pro-preview",
       contents: { parts: contents },
       config: { responseMimeType: "application/json", responseSchema: responseSchema },
     });
-    // Fixed: response.text is a property, not a method.
     const jsonString = response.text.trim();
     const parsedResponse = JSON.parse(jsonString);
 
@@ -237,6 +263,7 @@ export async function generateCourse(text: string, images: string[], difficulty:
  * Generates a new quiz for a given level's summary.
  */
 export async function generateNewQuiz(levelSummary: string, levelTitle: string): Promise<QuizQuestion[]> {
+  const ai = getAiClient();
   const prompt = `
     You are an AI quiz generator. Your task is to create a new set of quiz questions based on the provided text summary for a course level.
     The course level is titled: "${levelTitle}".
@@ -264,7 +291,6 @@ export async function generateNewQuiz(levelSummary: string, levelTitle: string):
   };
 
   try {
-    // Fixed: Using gemini-3-flash-preview for basic quiz generation tasks.
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: prompt,
@@ -282,6 +308,7 @@ export async function generateNewQuiz(levelSummary: string, levelTitle: string):
  * Generates a world trivia quiz.
  */
 export async function generateWorldQuiz(country: string, category: string): Promise<QuizQuestion[]> {
+  const ai = getAiClient();
   const prompt = `
     You are a quiz generation expert. Create a 5-question multiple-choice quiz about the ${category} of ${country}.
     The questions should be interesting and challenging for a general audience.
@@ -303,7 +330,6 @@ export async function generateWorldQuiz(country: string, category: string): Prom
   };
 
   try {
-    // Fixed: Using gemini-3-flash-preview for world trivia quizzes.
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: prompt,
@@ -317,17 +343,11 @@ export async function generateWorldQuiz(country: string, category: string): Prom
   }
 }
 
-
-// --- NEW FUNCTIONS FOR MANUAL COURSE CREATION ---
-
-type ManualLevel = { id: string; title: string; };
-type LevelContent = { summary: string, quiz: QuizQuestion[], references: StudySuggestions, imageUrl?: string };
-
-
 /**
  * Generates content for a single, pre-defined level title based on the full text.
  */
 async function generateLevelContent(fullText: string, allImages: string[], courseTopic: string, levelTitle: string, difficulty: 'Beginner' | 'Advanced'): Promise<LevelContent> {
+  const ai = getAiClient();
   const prompt = `
     You are an AI education assistant. The full document's main topic is "${courseTopic}".
     Based on the full text and all images provided below, generate content *specifically for the level titled "${levelTitle}"*.
@@ -380,7 +400,6 @@ async function generateLevelContent(fullText: string, allImages: string[], cours
     allImages.forEach(img => contents.push(fileToGenerativePart(img)));
   }
 
-  // Fixed: Using gemini-3-pro-preview for complex level content generation.
   const response = await ai.models.generateContent({
     model: "gemini-3-pro-preview",
     contents: { parts: contents },
@@ -403,6 +422,7 @@ async function generateLevelContent(fullText: string, allImages: string[], cours
  * Generates suggestions for next steps based on the course topic.
  */
 async function generateNextSteps(courseTopic: string): Promise<Course['nextSteps']> {
+  const ai = getAiClient();
   const prompt = `Based on the course topic "${courseTopic}", suggest 3 related topics for further learning and 1 advanced material suggestion (e.g., a case study, research paper, or advanced concept).`;
   const responseSchema = {
     type: Type.OBJECT,
@@ -422,7 +442,6 @@ async function generateNextSteps(courseTopic: string): Promise<Course['nextSteps
     },
     required: ["relatedTopics", "advancedMaterial"]
   };
-  // Fixed: Using gemini-3-flash-preview for simple next step suggestions.
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
     contents: prompt,
@@ -444,7 +463,6 @@ export async function generateCourseFromManualLevels(
   setProgressMessage: (message: string) => void
 ): Promise<Course> {
   try {
-    // Generate content for all levels in parallel
     const levelContentPromises = manualLevels.map((level, index) => {
       setProgressMessage(`Generating content for Level ${index + 1}: ${level.title}...`);
       return generateLevelContent(text, images, courseTitle, level.title, difficulty);
@@ -503,6 +521,7 @@ export async function generateAdditionalLevels(
   newImages: string[],
   difficulty: 'Beginner' | 'Advanced'
 ): Promise<Omit<Level, 'levelId' | 'status'>[]> {
+  const ai = getAiClient();
   const prompt = `
       You are an AI education assistant adding content to an existing course.
       The course is titled: "${courseTitle}".
@@ -571,7 +590,6 @@ export async function generateAdditionalLevels(
       newImages.forEach(img => contents.push(fileToGenerativePart(img)));
     }
 
-    // Fixed: Using gemini-3-pro-preview for complex level expansion.
     const response = await ai.models.generateContent({
       model: "gemini-3-pro-preview",
       contents: { parts: contents },
