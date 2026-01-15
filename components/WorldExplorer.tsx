@@ -19,17 +19,13 @@ const MAP_CONFIGS = {
         objectKey: 'india',
         nameProperty: 'ST_NM',
         label: 'India States'
-    },
-    usa: {
-        url: 'https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json',
-        objectKey: 'states',
-        nameProperty: 'name',
-        label: 'USA States'
     }
 };
 
 type MapType = keyof typeof MAP_CONFIGS;
+type Difficulty = 'Easy' | 'Medium' | 'Hard';
 
+const TRIVIA_HISTORY_KEY = 'worldExplorerTriviaHistory';
 const MAP_QUIZ_STORAGE_KEY = 'worldExplorerMapQuizStateV2';
 
 // Fisher-Yates shuffle algorithm
@@ -43,11 +39,11 @@ const shuffleArray = (array: any[]) => {
     return array;
 };
 
-// Memoized Geography component to prevent unnecessary re-renders on hover
 const MemoizedGeography = memo(Geography);
 
 const WorldExplorer: React.FC = () => {
-    const [selectedCountry, setSelectedCountry] = useState<string>('United States');
+    const [selectedCountry, setSelectedCountry] = useState<string>('India');
+    const [difficulty, setDifficulty] = useState<Difficulty>('Medium');
     const [activeCategory, setActiveCategory] = useState<string | null>(null);
     const [quiz, setQuiz] = useState<QuizQuestion[] | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -55,7 +51,6 @@ const WorldExplorer: React.FC = () => {
 
     // Map quiz state
     const [quizMode, setQuizMode] = useState<'list' | 'trivia' | 'map'>('list');
-    const [currentMapType, setCurrentMapType] = useState<MapType>('world');
     const [geoData, setGeoData] = useState<any>(null);
     const [mapQuizState, setMapQuizState] = useState({
         questions: [] as string[],
@@ -71,7 +66,6 @@ const WorldExplorer: React.FC = () => {
     const [position, setPosition] = useState({ coordinates: [0, 0] as [number, number], zoom: 1 });
 
     useEffect(() => {
-        // Load saved quiz on mount
         try {
             const savedStateJSON = localStorage.getItem(MAP_QUIZ_STORAGE_KEY);
             if (savedStateJSON) {
@@ -82,73 +76,44 @@ const WorldExplorer: React.FC = () => {
             }
         } catch (e) {
             console.error("Failed to load map quiz state:", e);
-            localStorage.removeItem(MAP_QUIZ_STORAGE_KEY);
         }
     }, []);
 
-    // Fetch geo data whenever map type changes for a quiz
     const fetchGeoData = async (type: MapType) => {
         setIsLoading(true);
         try {
             const res = await fetch(MAP_CONFIGS[type].url);
             const data = await res.json();
             setGeoData(data);
-            setCurrentMapType(type);
+            return data;
         } catch (err) {
             console.error("Failed to load map data:", err);
-            setError(`Could not load ${MAP_CONFIGS[type].label} data. Please try again later.`);
+            setError(`Could not load ${MAP_CONFIGS[type].label} data.`);
+            return null;
         } finally {
             setIsLoading(false);
         }
     };
-    
-    useEffect(() => {
-        // Save quiz progress automatically
-        if (quizMode === 'map' && !mapQuizState.gameOver && mapQuizState.questions.length > 0) {
-            try {
-                const stateToSave = {
-                    questions: mapQuizState.questions,
-                    currentIndex: mapQuizState.currentIndex,
-                    score: mapQuizState.score,
-                    mapType: mapQuizState.mapType
-                };
-                localStorage.setItem(MAP_QUIZ_STORAGE_KEY, JSON.stringify(stateToSave));
-                setSavedMapQuiz(stateToSave);
-            } catch (e) {
-                console.error("Failed to save map quiz state:", e);
-            }
-        }
-    }, [mapQuizState, quizMode]);
-
-    useEffect(() => {
-        if (quizMode === 'map') {
-            document.body.style.overflow = 'hidden';
-        } else {
-            document.body.style.overflow = '';
-        }
-        return () => {
-            document.body.style.overflow = '';
-        };
-    }, [quizMode]);
-
-    const countries = [
-        'United States', 'India', 'Japan', 'Brazil', 'Egypt', 'Italy', 'Australia', 'Nigeria', 'Mexico', 'China'
-    ];
-
-    const categories = [
-        { name: 'Geography', icon: 'globe' as const, description: 'States, cities, and landmarks.' },
-        { name: 'Culture', icon: 'academic-cap' as const, description: 'Food, festivals, and traditions.' },
-        { name: 'Nature', icon: 'leaf' as const, description: 'Unique animals and plants.' },
-        { name: 'History', icon: 'history' as const, description: 'Key historical events and figures.' },
-    ];
 
     const handleTriviaCategoryClick = useCallback(async (categoryName: string) => {
         setActiveCategory(categoryName);
         setIsLoading(true);
         setError(null);
         setQuiz(null);
+
+        // Load history to avoid repeats
+        const historyStr = localStorage.getItem(TRIVIA_HISTORY_KEY) || '[]';
+        const history = JSON.parse(historyStr);
+        const previousQuestions = history.map((h: any) => h.question);
+
         try {
-            const newQuiz = await generateWorldQuiz(selectedCountry, categoryName);
+            const promptSuffix = previousQuestions.length > 0 
+                ? `. Do NOT repeat these questions: ${previousQuestions.slice(-10).join(', ')}` 
+                : "";
+            
+            const difficultyInstruction = `This quiz should be at a ${difficulty} level of difficulty.`;
+            
+            const newQuiz = await generateWorldQuiz(selectedCountry, `${categoryName}. ${difficultyInstruction}${promptSuffix}`);
             setQuiz(newQuiz);
             setQuizMode('trivia');
         } catch (e: any) {
@@ -156,28 +121,34 @@ const WorldExplorer: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [selectedCountry]);
-    
-    const clearSavedQuiz = () => {
-        localStorage.removeItem(MAP_QUIZ_STORAGE_KEY);
-        setSavedMapQuiz(null);
+    }, [selectedCountry, difficulty]);
+
+    const onTriviaComplete = (score: number) => {
+        if (!quiz) return;
+        // Save to history
+        const historyStr = localStorage.getItem(TRIVIA_HISTORY_KEY) || '[]';
+        const history = JSON.parse(historyStr);
+        const newEntries = quiz.map(q => ({
+            ...q,
+            country: selectedCountry,
+            category: activeCategory,
+            difficulty,
+            timestamp: Date.now(),
+            score: score
+        }));
+        localStorage.setItem(TRIVIA_HISTORY_KEY, JSON.stringify([...history, ...newEntries].slice(-100)));
     };
 
     const startNewMapQuiz = async (type: MapType) => {
         setError(null);
-        await fetchGeoData(type);
-        
-        // Use the just-fetched or cached geoData
-        // We fetch explicitly to ensure we have it before calculating questions
-        const res = await fetch(MAP_CONFIGS[type].url);
-        const data = await res.json();
+        const data = await fetchGeoData(type);
+        if (!data) return;
         
         const config = MAP_CONFIGS[type];
         const geometries = data.objects[config.objectKey].geometries;
-        const allNames = geometries.map((g: any) => g.properties[config.nameProperty]);
-        const validNames = allNames.filter((n: any) => n && n !== "null");
+        const allNames = geometries.map((g: any) => g.properties[config.nameProperty]).filter(Boolean);
         
-        const shuffled = shuffleArray(validNames);
+        const shuffled = shuffleArray([...allNames]);
         const questions = shuffled.slice(0, 5);
 
         setMapQuizState({
@@ -190,21 +161,10 @@ const WorldExplorer: React.FC = () => {
             mapType: type
         });
         setQuizMode('map');
-        setPosition({ coordinates: type === 'world' ? [0, 0] : type === 'india' ? [78, 22] : [-96, 37], zoom: type === 'world' ? 1 : 2 });
-    };
-
-    const resumeMapQuiz = async () => {
-        if (!savedMapQuiz) return;
-        await fetchGeoData(savedMapQuiz.mapType);
-        setMapQuizState({
-            ...savedMapQuiz,
-            selectedGeo: null,
-            isCorrect: null,
-            gameOver: false,
+        setPosition({ 
+            coordinates: type === 'world' ? [0, 0] : type === 'india' ? [78, 22] : [0, 0], 
+            zoom: type === 'world' ? 1 : 2 
         });
-        setQuizMode('map');
-        const type = savedMapQuiz.mapType;
-        setPosition({ coordinates: type === 'world' ? [0, 0] : type === 'india' ? [78, 22] : [-96, 37], zoom: type === 'world' ? 1 : 2 });
     };
 
     const handleMapClick = (geo: any) => {
@@ -224,6 +184,16 @@ const WorldExplorer: React.FC = () => {
 
     const handleNextQuestion = () => {
         if (mapQuizState.currentIndex + 1 >= mapQuizState.questions.length) {
+            const finalScore = mapQuizState.isCorrect ? mapQuizState.score : mapQuizState.score;
+            // Store map result
+            const mapHistory = JSON.parse(localStorage.getItem('mapQuizHistory') || '[]');
+            mapHistory.push({
+                type: mapQuizState.mapType,
+                score: finalScore,
+                total: mapQuizState.questions.length,
+                timestamp: Date.now()
+            });
+            localStorage.setItem('mapQuizHistory', JSON.stringify(mapHistory.slice(-50)));
             setMapQuizState(prev => ({ ...prev, gameOver: true }));
         } else {
             setMapQuizState(prev => ({
@@ -239,38 +209,9 @@ const WorldExplorer: React.FC = () => {
         setQuiz(null);
         setActiveCategory(null);
         setError(null);
-        setIsLoading(false);
         setQuizMode('list');
-        setMapQuizState({
-            questions: [],
-            currentIndex: 0,
-            score: 0,
-            selectedGeo: null,
-            isCorrect: null,
-            gameOver: false,
-            mapType: 'world'
-        });
     };
 
-    const handleZoomIn = () => {
-        if (position.zoom >= 8) return;
-        setPosition(pos => ({ ...pos, zoom: pos.zoom * 1.5 }));
-    };
-
-    const handleZoomOut = () => {
-        if (position.zoom <= 1) return;
-        setPosition(pos => ({ ...pos, zoom: pos.zoom / 1.5 }));
-    };
-
-    const handleResetZoom = () => {
-        const type = mapQuizState.mapType;
-        setPosition({ coordinates: type === 'world' ? [0, 0] : type === 'india' ? [78, 22] : [-96, 37], zoom: type === 'world' ? 1 : 2 });
-    };
-
-    const handleMoveEnd = (position: { coordinates: [number, number]; zoom: number; }) => {
-        setPosition(position);
-    };
-    
     const getGeographyStyle = (geo: any) => {
         const config = MAP_CONFIGS[mapQuizState.mapType];
         const geoName = geo.properties[config.nameProperty];
@@ -279,229 +220,182 @@ const WorldExplorer: React.FC = () => {
         const correctName = mapQuizState.questions[mapQuizState.currentIndex];
         const isCorrectAnswer = geoName === correctName;
 
-        const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
-        const defaultFill = theme === 'dark' ? '#6b7280' : '#F2CFC2';
-        const defaultStroke = theme === 'dark' ? '#374151' : '#FFFFFF';
+        const isDark = document.documentElement.classList.contains('dark');
+        const defaultFill = isDark ? '#4b5563' : '#F2CFC2';
+        const defaultStroke = isDark ? '#1f2937' : '#FFFFFF';
 
         if (mapQuizState.isCorrect !== null) {
-            if (isCorrectAnswer) return { fill: '#4ade80', stroke: '#15803d' };
-            if (isSelected && !mapQuizState.isCorrect) return { fill: '#f87171', stroke: '#b91c1c' };
-        } else {
-             if (isHovered) return { fill: '#F2B872', stroke: '#F27B50' };
+            if (isCorrectAnswer) return { fill: '#4ade80', stroke: '#166534' };
+            if (isSelected && !mapQuizState.isCorrect) return { fill: '#f87171', stroke: '#991b1b' };
         }
-        
+        if (isHovered) return { fill: '#F2B872', stroke: '#F27B50' };
         return { fill: defaultFill, stroke: defaultStroke };
     };
+
+    const countries = ['India', 'United States', 'Japan', 'Brazil', 'Egypt', 'Italy', 'Australia', 'Nigeria', 'Mexico', 'France'];
+    const categories = [
+        { name: 'Geography', icon: 'globe' as const, description: 'States, cities, and landmarks.' },
+        { name: 'Culture', icon: 'academic-cap' as const, description: 'Food, festivals, and traditions.' },
+        { name: 'Nature', icon: 'leaf' as const, description: 'Unique animals and plants.' },
+        { name: 'History', icon: 'history' as const, description: 'Key historical events and figures.' },
+    ];
 
     if (isLoading) {
         return (
             <div className="bg-white dark:bg-[#4A2554] p-12 rounded-lg shadow-md text-center">
                 <Loader />
-                <p className="mt-4 text-lg text-gray-600 dark:text-primary-light">
-                    {quizMode === 'map' ? 'Preparing map quiz...' : `Generating your ${activeCategory} quiz for ${selectedCountry}...`}
-                </p>
-            </div>
-        );
-    }
-    
-    if (error) {
-        return (
-            <div className="mt-6 p-4 bg-red-100 text-red-700 border border-red-200 rounded-md">
-                <p><span className="font-bold">Error:</span> {error}</p>
-                <div className="mt-4 flex space-x-4">
-                    <button onClick={handleResetAndExit} className="text-sm font-semibold text-red-800 hover:underline">
-                        Back to Menu
-                    </button>
-                </div>
+                <p className="mt-4 text-lg text-gray-600 dark:text-primary-light">Preparing your quest...</p>
             </div>
         );
     }
 
     if (quizMode === 'trivia' && quiz) {
         return (
-             <div className="bg-white dark:bg-[#4A2554] p-6 rounded-lg shadow-md">
-                 <h2 className="text-xl font-bold text-text-dark dark:text-background mb-4">{activeCategory} Quiz: {selectedCountry}</h2>
-                <QuizDisplay quiz={quiz} onBack={handleResetAndExit} />
-             </div>
-        );
-    }
-    
-    if (quizMode === 'map' && !mapQuizState.gameOver) {
-        const currentQuestion = mapQuizState.questions[mapQuizState.currentIndex];
-        const config = MAP_CONFIGS[mapQuizState.mapType];
-        return (
-            <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4" onClick={() => setQuizMode('list')}>
-                <div className="bg-white dark:bg-[#4A2554] rounded-lg shadow-xl w-full max-w-5xl h-[90vh] flex flex-col p-4 sm:p-6" onClick={e => e.stopPropagation()}>
-                    <div className="flex-shrink-0">
-                        <div className="flex justify-between items-center mb-2">
-                            <h2 className="text-xl font-bold text-text-dark dark:text-background">{config.label} Quiz</h2>
-                            <p className="font-semibold text-text-dark dark:text-background">Score: {mapQuizState.score} / {mapQuizState.questions.length}</p>
-                        </div>
-                        <p className="text-lg text-center mb-4 text-text-dark dark:text-background">Find: <span className="font-bold text-accent">{currentQuestion}</span></p>
-                    </div>
-                    
-                    <div className="flex-grow border dark:border-primary rounded-lg overflow-hidden relative bg-primary-light dark:bg-text-dark min-h-0">
-                        <ComposableMap style={{ width: '100%', height: '100%' }} projectionConfig={{ scale: mapQuizState.mapType === 'world' ? 160 : 600 }}>
-                            <ZoomableGroup
-                                zoom={position.zoom}
-                                center={position.coordinates}
-                                onMoveEnd={handleMoveEnd}
-                            >
-                                <Geographies geography={geoData}>
-                                    {({ geographies }) =>
-                                        geographies.map(geo => (
-                                            <MemoizedGeography
-                                                key={geo.rsmKey}
-                                                geography={geo}
-                                                onClick={() => handleMapClick(geo)}
-                                                onMouseEnter={() => setHoveredGeo(geo.properties[config.nameProperty])}
-                                                onMouseLeave={() => setHoveredGeo(null)}
-                                                style={{
-                                                    default: getGeographyStyle(geo),
-                                                    hover: getGeographyStyle(geo),
-                                                    pressed: { ...getGeographyStyle(geo), outline: 'none' },
-                                                }}
-                                                className="cursor-pointer outline-none"
-                                            />
-                                        ))
-                                    }
-                                </Geographies>
-                            </ZoomableGroup>
-                        </ComposableMap>
-                        <div className="absolute right-2 bottom-2 flex flex-col space-y-1">
-                            <button onClick={handleZoomIn} aria-label="Zoom in" className="w-8 h-8 flex items-center justify-center bg-white dark:bg-[#4A2554] border border-gray-300 dark:border-primary rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-[#5A3564] focus:outline-none focus:ring-2 focus:ring-accent">
-                                <span className="text-xl font-thin select-none text-text-dark dark:text-background">+</span>
-                            </button>
-                            <button onClick={handleZoomOut} aria-label="Zoom out" className="w-8 h-8 flex items-center justify-center bg-white dark:bg-[#4A2554] border border-gray-300 dark:border-primary rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-[#5A3564] focus:outline-none focus:ring-2 focus:ring-accent">
-                                <span className="text-2xl font-thin select-none text-text-dark dark:text-background">-</span>
-                            </button>
-                            <button onClick={handleResetZoom} aria-label="Reset view" className="w-8 h-8 flex items-center justify-center bg-white dark:bg-[#4A2554] border border-gray-300 dark:border-primary rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-[#5A3564] focus:outline-none focus:ring-2 focus:ring-accent">
-                                <Icon name="refresh" className="w-5 h-5 text-gray-600 dark:text-primary-light" />
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="flex-shrink-0">
-                        <div className="h-12 flex items-center justify-center text-center">
-                            {mapQuizState.isCorrect === true && <p className="text-green-600 dark:text-green-400 font-bold">Correct!</p>}
-                            {mapQuizState.isCorrect === false && <p className="text-red-600 dark:text-red-400 font-bold">Incorrect! That was {mapQuizState.selectedGeo?.properties[config.nameProperty]}.</p>}
-                        </div>
-                        <div className="flex justify-between items-center mt-2">
-                            <button onClick={() => setQuizMode('list')} className="text-sm text-gray-500 dark:text-primary-light hover:text-text-dark dark:hover:text-background">Exit Quiz</button>
-                            {mapQuizState.isCorrect !== null && (
-                                <button onClick={handleNextQuestion} className="bg-accent text-white font-bold py-2 px-4 rounded-md hover:opacity-90">
-                                   {mapQuizState.currentIndex + 1 === mapQuizState.questions.length ? 'Finish Quiz' : 'Next Question'}
-                                </button>
-                            )}
-                        </div>
-                    </div>
+            <div className="bg-white dark:bg-[#4A2554] p-6 rounded-lg shadow-md">
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-xl font-bold text-text-dark dark:text-background">{selectedCountry} - {activeCategory} ({difficulty})</h2>
                 </div>
+                <QuizDisplay quiz={quiz} onBack={handleResetAndExit} onQuizComplete={onTriviaComplete} />
             </div>
         );
     }
 
-    if (quizMode === 'map' && mapQuizState.gameOver) {
-        return (
-            <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
-                <div className="bg-white dark:bg-[#4A2554] p-8 rounded-lg shadow-xl text-center w-full max-w-md">
+    if (quizMode === 'map') {
+        if (mapQuizState.gameOver) {
+            return (
+                <div className="bg-white dark:bg-[#4A2554] p-12 rounded-lg shadow-xl text-center">
+                    <Icon name="check" className="w-16 h-16 text-green-500 mx-auto mb-4" />
                     <h2 className="text-2xl font-bold text-text-dark dark:text-background mb-4">Quiz Complete!</h2>
-                    <p className="text-4xl font-bold mb-6 text-text-dark dark:text-background">You scored {mapQuizState.score} out of {mapQuizState.questions.length}</p>
-                     <div className="flex justify-center space-x-4">
-                         <button onClick={handleResetAndExit} className="bg-gray-200 dark:bg-text-dark text-text-dark dark:text-background font-bold py-2 px-4 rounded-md hover:bg-gray-300 dark:hover:bg-[#5A3564]">
-                            Back to Menu
+                    <p className="text-4xl font-bold mb-6 text-text-dark dark:text-background">Score: {mapQuizState.score} / {mapQuizState.questions.length}</p>
+                    <button onClick={handleResetAndExit} className="bg-accent text-white font-bold py-3 px-8 rounded-xl hover:opacity-90">Return to Menu</button>
+                </div>
+            );
+        }
+
+        const config = MAP_CONFIGS[mapQuizState.mapType];
+        return (
+            <div className="bg-white dark:bg-[#4A2554] rounded-xl shadow-xl flex flex-col h-[80vh] overflow-hidden">
+                <div className="p-4 bg-primary-light dark:bg-text-dark flex justify-between items-center border-b dark:border-primary">
+                    <div>
+                        <h2 className="font-bold text-text-dark dark:text-background">{config.label} Challenge</h2>
+                        <p className="text-sm text-gray-600 dark:text-primary-light">Find: <span className="font-bold text-accent text-lg">{mapQuizState.questions[mapQuizState.currentIndex]}</span></p>
+                    </div>
+                    <div className="text-right">
+                        <p className="font-bold text-text-dark dark:text-background">Score: {mapQuizState.score}/{mapQuizState.questions.length}</p>
+                        <button onClick={handleResetAndExit} className="text-xs text-red-500 hover:underline">Exit Quiz</button>
+                    </div>
+                </div>
+
+                <div className="flex-grow relative bg-blue-50 dark:bg-slate-900 cursor-crosshair">
+                    <ComposableMap style={{ width: '100%', height: '100%' }}>
+                        <ZoomableGroup zoom={position.zoom} center={position.coordinates} onMoveEnd={pos => setPosition(pos)}>
+                            <Geographies geography={geoData}>
+                                {({ geographies }) => geographies.map(geo => (
+                                    <MemoizedGeography
+                                        key={geo.rsmKey}
+                                        geography={geo}
+                                        onClick={() => handleMapClick(geo)}
+                                        onMouseEnter={() => setHoveredGeo(geo.properties[config.nameProperty])}
+                                        onMouseLeave={() => setHoveredGeo(null)}
+                                        style={{
+                                            default: getGeographyStyle(geo),
+                                            hover: getGeographyStyle(geo),
+                                            pressed: getGeographyStyle(geo),
+                                        }}
+                                        className="transition-colors duration-200 outline-none"
+                                    />
+                                ))}
+                            </Geographies>
+                        </ZoomableGroup>
+                    </ComposableMap>
+                </div>
+
+                <div className="p-4 bg-white dark:bg-[#4A2554] border-t dark:border-primary flex justify-between items-center">
+                    <div className="h-8">
+                        {mapQuizState.isCorrect === true && <span className="text-green-600 font-bold animate-bounce block">✓ Correct!</span>}
+                        {mapQuizState.isCorrect === false && <span className="text-red-600 font-bold block">✗ Wrong! That was {mapQuizState.selectedGeo?.properties[config.nameProperty]}</span>}
+                    </div>
+                    {mapQuizState.isCorrect !== null && (
+                        <button onClick={handleNextQuestion} className="bg-accent text-white px-6 py-2 rounded-lg font-bold hover:opacity-90">
+                            {mapQuizState.currentIndex === mapQuizState.questions.length - 1 ? 'See Results' : 'Next Question'}
                         </button>
-                        <button onClick={() => startNewMapQuiz(mapQuizState.mapType)} className="bg-accent text-white font-bold py-2 px-4 rounded-md hover:opacity-90">
-                            Play Again
-                        </button>
-                     </div>
+                    )}
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="bg-white dark:bg-[#4A2554] p-6 rounded-lg shadow-md">
-            <h2 className="text-2xl font-bold text-text-dark dark:text-background mb-2">World Explorer Trivia</h2>
-            <p className="text-gray-600 dark:text-primary-light mb-6">Select a country and a category to test your knowledge!</p>
-
-            <div className="mb-8 p-4 bg-primary-light dark:bg-text-dark rounded-xl border border-primary dark:border-accent shadow-sm">
-                <h3 className="text-lg font-bold text-text-dark dark:text-background mb-4 flex items-center">
+        <div className="space-y-8 animate-fade-in">
+            {/* Map Section */}
+            <div className="bg-white dark:bg-[#4A2554] p-6 rounded-2xl shadow-sm border dark:border-primary">
+                <h2 className="text-2xl font-bold text-text-dark dark:text-background mb-4 flex items-center">
                     <Icon name="map" className="w-6 h-6 mr-2 text-accent" />
-                    Interactive Map Quizzes
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <button 
-                        onClick={() => startNewMapQuiz('world')}
-                        className="p-3 bg-white dark:bg-[#4A2554] border border-gray-200 dark:border-primary rounded-lg hover:border-accent transition-all flex flex-col items-center text-center group"
-                    >
-                        <Icon name="globe" className="w-8 h-8 mb-2 text-accent group-hover:scale-110 transition-transform" />
-                        <span className="font-bold text-sm text-text-dark dark:text-background">World Map</span>
-                        <span className="text-xs text-gray-500 dark:text-primary-light">Guess countries</span>
+                    Cartography Challenges
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <button onClick={() => startNewMapQuiz('india')} className="p-6 border-2 border-primary-light dark:border-primary rounded-2xl hover:border-accent transition-all text-center group">
+                        <div className="text-3xl mb-2 group-hover:scale-110 transition-transform">🇮🇳</div>
+                        <p className="font-bold dark:text-background">India States</p>
                     </button>
-                    <button 
-                        onClick={() => startNewMapQuiz('india')}
-                        className="p-3 bg-white dark:bg-[#4A2554] border border-gray-200 dark:border-primary rounded-lg hover:border-accent transition-all flex flex-col items-center text-center group"
-                    >
-                        <div className="w-8 h-8 mb-2 flex items-center justify-center font-bold text-accent border-2 border-accent rounded-full group-hover:scale-110 transition-transform">IN</div>
-                        <span className="font-bold text-sm text-text-dark dark:text-background">India States</span>
-                        <span className="text-xs text-gray-500 dark:text-primary-light">Guess states/UTs</span>
-                    </button>
-                    <button 
-                        onClick={() => startNewMapQuiz('usa')}
-                        className="p-3 bg-white dark:bg-[#4A2554] border border-gray-200 dark:border-primary rounded-lg hover:border-accent transition-all flex flex-col items-center text-center group"
-                    >
-                        <div className="w-8 h-8 mb-2 flex items-center justify-center font-bold text-accent border-2 border-accent rounded-full group-hover:scale-110 transition-transform">US</div>
-                        <span className="font-bold text-sm text-text-dark dark:text-background">USA States</span>
-                        <span className="text-xs text-gray-500 dark:text-primary-light">Guess 50 states</span>
+                    <button onClick={() => startNewMapQuiz('world')} className="p-6 border-2 border-primary-light dark:border-primary rounded-2xl hover:border-accent transition-all text-center group">
+                        <div className="text-3xl mb-2 group-hover:scale-110 transition-transform">🌍</div>
+                        <p className="font-bold dark:text-background">World Countries</p>
                     </button>
                 </div>
-                {savedMapQuiz && (
-                    <div className="mt-4 pt-4 border-t border-primary dark:border-accent flex justify-between items-center">
-                        <div className="text-sm">
-                            <span className="font-semibold text-text-dark dark:text-background">Progress: </span>
-                            <span className="text-gray-600 dark:text-primary-light">
-                                {MAP_CONFIGS[savedMapQuiz.mapType as MapType].label} ({savedMapQuiz.currentIndex}/{savedMapQuiz.questions.length})
-                            </span>
-                        </div>
-                        <div className="flex space-x-3">
-                            <button onClick={clearSavedQuiz} className="text-xs font-medium text-gray-500 hover:text-red-500 transition-colors">Clear Saved</button>
-                            <button onClick={resumeMapQuiz} className="bg-accent text-white px-4 py-1.5 rounded-md text-sm font-bold hover:opacity-90">Resume</button>
+            </div>
+
+            {/* Trivia Section */}
+            <div className="bg-white dark:bg-[#4A2554] p-6 rounded-2xl shadow-sm border dark:border-primary">
+                <h2 className="text-2xl font-bold text-text-dark dark:text-background mb-6 flex items-center">
+                    <Icon name="sparkles" className="w-6 h-6 mr-2 text-accent" />
+                    Deep Trivia
+                </h2>
+                
+                <div className="flex flex-col md:flex-row gap-6 mb-8">
+                    <div className="flex-1">
+                        <label className="block text-sm font-bold text-gray-700 dark:text-primary-light mb-2">Select Focus</label>
+                        <select
+                            value={selectedCountry}
+                            onChange={(e) => setSelectedCountry(e.target.value)}
+                            className="w-full p-3 bg-gray-50 dark:bg-text-dark border dark:border-primary rounded-xl dark:text-background focus:ring-accent focus:border-accent"
+                        >
+                            {countries.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    </div>
+                    <div className="flex-1">
+                        <label className="block text-sm font-bold text-gray-700 dark:text-primary-light mb-2">Difficulty Scale</label>
+                        <div className="flex bg-gray-100 dark:bg-text-dark p-1 rounded-xl border dark:border-primary">
+                            {(['Easy', 'Medium', 'Hard'] as Difficulty[]).map(level => (
+                                <button
+                                    key={level}
+                                    onClick={() => setDifficulty(level)}
+                                    className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${difficulty === level ? 'bg-accent text-white shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#4A2554]'}`}
+                                >
+                                    {level}
+                                </button>
+                            ))}
                         </div>
                     </div>
-                )}
-            </div>
+                </div>
 
-            <div className="mb-6 max-w-sm">
-                <label htmlFor="country-select" className="block text-sm font-medium text-gray-700 dark:text-primary-light mb-1">Trivia Country Focus</label>
-                <select
-                    id="country-select"
-                    value={selectedCountry}
-                    onChange={(e) => setSelectedCountry(e.target.value)}
-                    className="w-full p-2 border border-primary-light dark:border-primary bg-white dark:bg-text-dark rounded-md focus:ring-accent focus:border-accent text-text-dark dark:text-background"
-                >
-                    {countries.map(country => (
-                        <option key={country} value={country}>{country}</option>
-                    ))}
-                </select>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {categories.map(category => (
-                    <button
-                        key={category.name}
-                        // Fixed: Corrected handler name from handleCategoryClick to handleTriviaCategoryClick.
-                        onClick={() => handleTriviaCategoryClick(category.name)}
-                        className="p-4 bg-gray-50 dark:bg-text-dark border border-gray-200 dark:border-primary rounded-lg text-left hover:bg-primary-light dark:hover:bg-[#5A3564] hover:border-accent focus:outline-none focus:ring-2 focus:ring-accent transition-colors"
-                    >
-                        <div className="flex items-center">
-                            <Icon name={category.icon} className="w-8 h-8 text-accent" />
-                            <div className="ml-4">
-                                <p className="text-lg font-semibold text-text-dark dark:text-background">{category.name}</p>
-                                <p className="text-sm text-gray-500 dark:text-primary-light">{category.description}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {categories.map(cat => (
+                        <button
+                            key={cat.name}
+                            onClick={() => handleTriviaCategoryClick(cat.name)}
+                            className="flex items-center p-4 border dark:border-primary rounded-xl hover:bg-primary-light dark:hover:bg-text-dark transition-colors group text-left"
+                        >
+                            <div className="w-12 h-12 bg-primary-light dark:bg-[#4A2554] rounded-xl flex items-center justify-center mr-4 group-hover:bg-accent group-hover:text-white transition-colors">
+                                <Icon name={cat.icon} className="w-6 h-6" />
                             </div>
-                        </div>
-                    </button>
-                ))}
+                            <div>
+                                <p className="font-bold dark:text-background">{cat.name}</p>
+                                <p className="text-xs text-gray-500 dark:text-primary-light">{cat.description}</p>
+                            </div>
+                        </button>
+                    ))}
+                </div>
             </div>
         </div>
     );
