@@ -13,12 +13,6 @@ const MAP_CONFIGS = {
         objectKey: 'countries',
         nameProperty: 'name',
         label: 'World Countries'
-    },
-    india: {
-        url: 'https://raw.githubusercontent.com/deldersveld/topojson/master/countries/india/india-states.json',
-        objectKey: 'india',
-        nameProperty: 'ST_NM',
-        label: 'India States'
     }
 };
 
@@ -162,8 +156,8 @@ const WorldExplorer: React.FC = () => {
         });
         setQuizMode('map');
         setPosition({ 
-            coordinates: type === 'world' ? [0, 0] : type === 'india' ? [78, 22] : [0, 0], 
-            zoom: type === 'world' ? 1 : 2 
+            coordinates: [0, 0], 
+            zoom: 1 
         });
     };
 
@@ -333,14 +327,11 @@ const WorldExplorer: React.FC = () => {
                     <Icon name="map" className="w-6 h-6 mr-2 text-accent" />
                     Cartography Challenges
                 </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <button onClick={() => startNewMapQuiz('india')} className="p-6 border-2 border-primary-light dark:border-primary rounded-2xl hover:border-accent transition-all text-center group">
-                        <div className="text-3xl mb-2 group-hover:scale-110 transition-transform">🇮🇳</div>
-                        <p className="font-bold dark:text-background">India States</p>
-                    </button>
-                    <button onClick={() => startNewMapQuiz('world')} className="p-6 border-2 border-primary-light dark:border-primary rounded-2xl hover:border-accent transition-all text-center group">
-                        <div className="text-3xl mb-2 group-hover:scale-110 transition-transform">🌍</div>
-                        <p className="font-bold dark:text-background">World Countries</p>
+                <div className="flex justify-center">
+                    <button onClick={() => startNewMapQuiz('world')} className="w-full max-w-md p-8 border-2 border-primary-light dark:border-primary rounded-2xl hover:border-accent transition-all text-center group">
+                        <div className="text-4xl mb-3 group-hover:scale-110 transition-transform">🌍</div>
+                        <p className="font-bold text-xl dark:text-background">World Countries</p>
+                        <p className="text-sm text-gray-500 dark:text-primary-light mt-2">Identify nations across the globe</p>
                     </button>
                 </div>
             </div>
