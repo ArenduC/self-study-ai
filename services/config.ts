@@ -8,4 +8,4 @@
   purposes only, following a direct user request, and should not be 
   used in a production environment.
 */
-export const API_KEY = "PASTE_YOUR_GEMINI_API_KEY_HERE";
+export const API_KEY = "AIzaSyD068y0BGfBG-WFLAXPPLfUgTUDJEBV_MU";
