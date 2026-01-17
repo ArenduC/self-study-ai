@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useCallback } from 'react';
 import { Course, QuizAttempt } from '../services/geminiService';
 import { Icon } from './Icon';
@@ -14,35 +15,53 @@ type PdfContent = { text: string; images: string[]; };
 // --- History Modal Component ---
 const HistoryModal: React.FC<{ course: Course; onClose: () => void; }> = ({ course, onClose }) => {
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-            <div className="bg-white dark:bg-[#4A2554] rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-                <div className="p-4 border-b dark:border-primary flex justify-between items-center">
-                    <h2 className="text-lg font-semibold text-text-dark dark:text-background">Attempt History: {course.courseTitle}</h2>
-                    <button onClick={onClose} className="text-gray-400 dark:text-primary-light hover:text-gray-600 dark:hover:text-background">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={onClose}>
+            <div className="bg-white dark:bg-[#4A2554] rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
+                <div className="p-5 border-b dark:border-primary flex justify-between items-center bg-gray-50 dark:bg-text-dark rounded-t-2xl">
+                    <div>
+                        <h2 className="text-xl font-bold text-text-dark dark:text-background leading-tight">Quiz Attempt History</h2>
+                        <p className="text-sm text-gray-500 dark:text-primary-light truncate max-w-xs sm:max-w-md">{course.courseTitle}</p>
+                    </div>
+                    <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-primary transition-colors text-gray-500 dark:text-primary-light">
                         <Icon name="x" className="w-6 h-6" />
                     </button>
                 </div>
                 <div className="p-6 overflow-y-auto">
-                    {course.history.length > 0 ? (
-                        <div className="space-y-4">
-                            {course.history.map(attempt => (
-                                <div key={attempt.attemptId} className="border border-gray-200 dark:border-primary rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                    {course.history && course.history.length > 0 ? (
+                        <div className="space-y-3">
+                            {[...course.history].sort((a, b) => b.timestamp - a.timestamp).map(attempt => (
+                                <div key={attempt.attemptId} className="border border-gray-100 dark:border-primary rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between bg-white dark:bg-text-dark hover:border-accent transition-colors">
                                     <div className="mb-2 sm:mb-0">
-                                        <p className="font-semibold text-text-dark dark:text-background">{attempt.levelTitle}</p>
-                                        <p className="text-xs text-gray-500 dark:text-primary-light">{new Date(attempt.timestamp).toLocaleString()}</p>
+                                        <p className="font-bold text-text-dark dark:text-background">{attempt.levelTitle}</p>
+                                        <div className="flex items-center text-xs text-gray-500 dark:text-primary-light mt-1">
+                                            <Icon name="history" className="w-3 h-3 mr-1" />
+                                            {new Date(attempt.timestamp).toLocaleDateString()} at {new Date(attempt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </div>
                                     </div>
-                                    <div className="flex items-center space-x-4 text-sm">
-                                        <span className="font-medium text-gray-600 dark:text-primary-light">Score: {attempt.score}/{attempt.totalQuestions}</span>
-                                        <span className={`font-bold px-2 py-1 rounded-md text-xs ${attempt.percentage >= 70 ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                    <div className="flex items-center space-x-4">
+                                        <div className="text-right">
+                                            <p className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Score</p>
+                                            <p className="font-bold text-lg text-text-dark dark:text-background">{attempt.score}<span className="text-sm font-normal text-gray-400">/{attempt.totalQuestions}</span></p>
+                                        </div>
+                                        <div className={`h-12 w-12 rounded-full border-2 flex items-center justify-center text-xs font-black ${attempt.percentage >= 70 ? 'border-green-500 text-green-600 bg-green-50 dark:bg-green-900/20' : 'border-yellow-500 text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20'}`}>
                                             {attempt.percentage.toFixed(0)}%
-                                        </span>
+                                        </div>
                                     </div>
                                 </div>
                             ))}
                         </div>
                     ) : (
-                        <p className="text-center text-gray-500 dark:text-primary-light py-8">No quiz attempts have been recorded for this course yet.</p>
+                        <div className="text-center py-12">
+                            <div className="bg-gray-100 dark:bg-text-dark w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <Icon name="history" className="w-8 h-8 text-gray-400" />
+                            </div>
+                            <p className="text-lg font-medium text-text-dark dark:text-background">No attempts yet</p>
+                            <p className="text-sm text-gray-500 dark:text-primary-light">Start a quiz in this course to see your history here.</p>
+                        </div>
                     )}
+                </div>
+                <div className="p-4 bg-gray-50 dark:bg-text-dark border-t dark:border-primary rounded-b-2xl text-center">
+                    <button onClick={onClose} className="text-sm font-bold text-accent hover:underline">Close History</button>
                 </div>
             </div>
         </div>
@@ -355,41 +374,57 @@ const Dashboard: React.FC<DashboardProps> = ({ courses, onCreateCourse, onSelect
                             const difficulty = course.difficulty || 'Beginner';
 
                             return (
-                                <div key={course.courseId} className="bg-white dark:bg-[#4A2554] rounded-lg shadow-md p-5 flex flex-col justify-between hover:shadow-lg transition-shadow">
-                                    <div>
-                                        <h3 className="text-lg font-bold text-text-dark dark:text-background truncate">{course.courseTitle}</h3>
-                                        <div className="flex justify-between items-center mt-1 mb-4">
-                                            <p className="text-sm text-gray-500 dark:text-primary-light">{course.levels.length} {course.levels.length === 1 ? 'level' : 'levels'}</p>
-                                            <span className={`text-xs font-semibold px-2 py-1 rounded-full ${difficulty === 'Beginner' ? 'bg-green-100 text-green-800' : 'bg-purple-100 text-purple-800'}`}>{difficulty}</span>
+                                <div key={course.courseId} className="bg-white dark:bg-[#4A2554] rounded-2xl shadow-sm p-5 flex flex-col justify-between hover:shadow-xl transition-all border border-gray-100 dark:border-primary relative overflow-hidden group">
+                                    <div className="absolute top-0 right-0 w-16 h-16 bg-primary-light dark:bg-primary opacity-10 rounded-bl-full transform translate-x-4 -translate-y-4 group-hover:scale-150 transition-transform"></div>
+                                    <div className="relative">
+                                        <h3 className="text-lg font-bold text-text-dark dark:text-background leading-snug h-14 overflow-hidden mb-1">{course.courseTitle}</h3>
+                                        <div className="flex justify-between items-center mb-4">
+                                            <p className="text-xs font-medium text-gray-400 dark:text-primary-light flex items-center">
+                                                <Icon name="book-open" className="w-3 h-3 mr-1" />
+                                                {course.levels.length} Modules
+                                            </p>
+                                            <span className={`text-[10px] uppercase tracking-widest font-black px-2 py-0.5 rounded-md ${difficulty === 'Beginner' ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'}`}>{difficulty}</span>
                                         </div>
                                         
-                                        <div className="mb-4 space-y-2">
+                                        <div className="mb-4 space-y-3">
                                             <div>
-                                                <div className="flex justify-between text-xs font-medium text-gray-600 dark:text-primary-light mb-1">
-                                                    <span>Progress</span>
+                                                <div className="flex justify-between text-[10px] font-bold text-gray-500 dark:text-primary-light mb-1 uppercase tracking-tighter">
+                                                    <span>Course Progress</span>
                                                     <span>{course.progress}%</span>
                                                 </div>
-                                                <div className="w-full bg-gray-200 dark:bg-text-dark rounded-full h-2.5">
-                                                    <div className="bg-primary h-2.5 rounded-full transition-all duration-500 ease-in-out" style={{ width: `${course.progress}%` }}></div>
+                                                <div className="w-full bg-gray-100 dark:bg-text-dark rounded-full h-1.5">
+                                                    <div className="bg-gradient-to-r from-primary to-accent h-1.5 rounded-full transition-all duration-700 ease-out" style={{ width: `${course.progress}%` }}></div>
                                                 </div>
                                             </div>
-                                            <div className="flex justify-between text-xs text-gray-600 dark:text-primary-light pt-2 border-t dark:border-primary">
-                                                <span>Avg. Score: <span className="font-bold">{averageScore.toFixed(0)}%</span></span>
-                                                <span>Attempts: <span className="font-bold">{totalAttempts}</span></span>
+                                            <div className="flex justify-between text-[11px] text-gray-600 dark:text-primary-light py-2 border-t border-gray-50 dark:border-primary/30">
+                                                <span className="flex items-center"><Icon name="chart-bar" className="w-3 h-3 mr-1 text-primary" /> Avg: <b>{averageScore.toFixed(0)}%</b></span>
+                                                <span className="flex items-center"><Icon name="history" className="w-3 h-3 mr-1 text-primary" /> Attempts: <b>{totalAttempts}</b></span>
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="flex items-center justify-between mt-2">
+                                    <div className="flex items-center justify-between mt-auto pt-4 border-t dark:border-primary/50 relative z-10">
                                         <div className="flex items-center space-x-1">
-                                             <button onClick={() => setViewingHistory(course)} aria-label={`View history for ${course.courseTitle}`} className="text-gray-400 dark:text-primary-light hover:text-accent p-2 rounded-full transition-colors">
+                                             <button 
+                                                onClick={() => setViewingHistory(course)} 
+                                                title="View attempt history"
+                                                className="text-gray-400 dark:text-primary-light hover:text-accent hover:bg-accent/10 p-2 rounded-xl transition-all"
+                                            >
                                                 <Icon name="history" className="w-5 h-5" />
                                             </button>
-                                            <button onClick={() => onDeleteCourse(course.courseId)} aria-label={`Delete course ${course.courseTitle}`} className="text-gray-400 dark:text-primary-light hover:text-red-600 p-2 rounded-full transition-colors">
+                                            <button 
+                                                onClick={() => onDeleteCourse(course.courseId)} 
+                                                title="Delete course"
+                                                className="text-gray-400 dark:text-primary-light hover:text-red-500 hover:bg-red-50 p-2 rounded-xl transition-all"
+                                            >
                                                 <Icon name="trash" className="w-5 h-5" />
                                             </button>
                                         </div>
-                                        <button onClick={() => onSelectCourse(course.courseId)} className="bg-primary-light text-text-dark font-semibold py-2 px-4 rounded-md hover:bg-primary dark:bg-primary dark:hover:opacity-90 text-sm">
-                                            Open Course
+                                        <button 
+                                            onClick={() => onSelectCourse(course.courseId)} 
+                                            className="bg-primary-light text-text-dark font-bold py-2 px-5 rounded-xl hover:bg-primary dark:bg-primary dark:hover:bg-accent dark:hover:text-white transition-all text-sm flex items-center group-hover:shadow-lg group-hover:shadow-primary/20"
+                                        >
+                                            Open 
+                                            <Icon name="arrow-right" className="w-4 h-4 ml-2" />
                                         </button>
                                     </div>
                                 </div>
@@ -403,10 +438,13 @@ const Dashboard: React.FC<DashboardProps> = ({ courses, onCreateCourse, onSelect
                     </div>
                 )
             ) : (
-                <div className="text-center bg-white dark:bg-[#4A2554] p-12 rounded-lg shadow-md">
-                    <h3 className="text-xl font-semibold text-text-dark dark:text-background">No courses yet!</h3>
-                    <p className="text-gray-500 dark:text-primary-light mt-2 mb-6">Click "New Course" to get started by uploading a PDF.</p>
-                    <button onClick={() => setIsCreating(true)} className="bg-accent text-white font-bold py-2 px-4 rounded-md hover:opacity-90">
+                <div className="text-center bg-white dark:bg-[#4A2554] p-12 rounded-lg shadow-md border-2 border-dashed dark:border-primary">
+                    <div className="bg-primary-light/30 dark:bg-text-dark w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <Icon name="book-open" className="w-10 h-10 text-accent" />
+                    </div>
+                    <h3 className="text-2xl font-bold text-text-dark dark:text-background">Welcome to Course Creator</h3>
+                    <p className="text-gray-500 dark:text-primary-light mt-3 mb-8 max-w-sm mx-auto">Transform your study notes into structured courses. Start by uploading a PDF document.</p>
+                    <button onClick={() => setIsCreating(true)} className="bg-accent text-white font-black py-4 px-10 rounded-2xl hover:opacity-90 shadow-xl shadow-accent/20 transition-all hover:-translate-y-1">
                         Create Your First Course
                     </button>
                 </div>
@@ -415,22 +453,24 @@ const Dashboard: React.FC<DashboardProps> = ({ courses, onCreateCourse, onSelect
     );
 
     return (
-        <div>
+        <div className="animate-fade-in">
             {viewingHistory && <HistoryModal course={viewingHistory} onClose={() => setViewingHistory(null)} />}
             
-            <div className="mb-6 border-b border-gray-200 dark:border-primary">
-                <nav className="-mb-px flex space-x-6" aria-label="Tabs">
+            <div className="mb-8 border-b border-gray-200 dark:border-primary">
+                <nav className="-mb-px flex space-x-8" aria-label="Tabs">
                     <button
                         onClick={() => setActiveView('courses')}
-                        className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeView === 'courses' ? 'border-accent text-accent' : 'border-transparent text-gray-500 dark:text-primary-light hover:text-gray-700 dark:hover:text-background hover:border-gray-300 dark:hover:border-primary'}`}
+                        className={`whitespace-nowrap py-4 px-1 border-b-2 font-bold text-sm transition-all flex items-center ${activeView === 'courses' ? 'border-accent text-accent' : 'border-transparent text-gray-500 dark:text-primary-light hover:text-text-dark dark:hover:text-background'}`}
                     >
-                        My Courses
+                        <Icon name="book-open" className="w-4 h-4 mr-2" />
+                        Course Library
                     </button>
                     <button
                         onClick={() => setActiveView('explorer')}
-                        className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeView === 'explorer' ? 'border-accent text-accent' : 'border-transparent text-gray-500 dark:text-primary-light hover:text-gray-700 dark:hover:text-background hover:border-gray-300 dark:hover:border-primary'}`}
+                        className={`whitespace-nowrap py-4 px-1 border-b-2 font-bold text-sm transition-all flex items-center ${activeView === 'explorer' ? 'border-accent text-accent' : 'border-transparent text-gray-500 dark:text-primary-light hover:text-text-dark dark:hover:text-background'}`}
                     >
-                        World Explorer
+                        <Icon name="globe" className="w-4 h-4 mr-2" />
+                        World Trivia
                     </button>
                 </nav>
             </div>

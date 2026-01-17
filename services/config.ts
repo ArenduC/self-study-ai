@@ -1,5 +1,2 @@
 
-/* 
-  THIS FILE IS DEPRECATED AND SHOULD BE DELETED.
-  API keys must be accessed via process.env.API_KEY.
-*/
+export const GEMINI_API_KEY = "AIzaSyD068y0BGfBG-WFLAXPPLfUgTUDJEBV_MU";

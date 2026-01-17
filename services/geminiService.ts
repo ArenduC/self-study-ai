@@ -1,5 +1,6 @@
 
 import { GoogleGenAI, Type, Part } from "@google/genai";
+import { GEMINI_API_KEY } from "./config";
 
 // --- RE-USED INTERFACES (now part of the Course structure) ---
 export interface QuizQuestion {
@@ -95,11 +96,10 @@ export interface ManualLevel {
 
 /**
  * Helper to get a fresh instance of the AI client.
- * This ensures process.env.API_KEY is accessed at call-time.
- * As per guidelines, the API key must be obtained exclusively from process.env.API_KEY.
+ * Uses the API key provided in config.ts.
  */
 const getAiClient = () => {
-  return new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+  return new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 };
 
 // Helper to convert base64 data URLs to Gemini Parts
