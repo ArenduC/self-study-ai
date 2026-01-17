@@ -96,13 +96,10 @@ export interface ManualLevel {
 /**
  * Helper to get a fresh instance of the AI client.
  * This ensures process.env.API_KEY is accessed at call-time.
+ * As per guidelines, the API key must be obtained exclusively from process.env.API_KEY.
  */
 const getAiClient = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    throw new Error("API Key is missing. Please ensure process.env.API_KEY is set in your environment.");
-  }
-  return new GoogleGenAI({ apiKey });
+  return new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 };
 
 // Helper to convert base64 data URLs to Gemini Parts
